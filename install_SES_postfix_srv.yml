@@ -1,0 +1,110 @@
+#
+# This Playbook installs Postfix  Heiloom-mailx on an Email Relay
+#
+# Script by dnorth
+# 
+---
+- hosts: all
+  become: yes
+  become_method: sudo
+  become_user: root
+  tasks:
+  - include_vars: vars/SES_postfix_srv.yml
+  
+   
+  - name: Install Postfix and heiloom-mailx
+    apt:
+      name: "{{ item }}"
+      state: latest
+      update_cache: yes
+    with_items:
+      - postfix
+      - heirloom-mailx
+    tags: 
+      - install
+    
+  - name: Configure Postfix main.cf
+    lineinfile:
+      backup: yes
+      dest: /etc/postfix/main.cf
+      regexp: "^{{ item.variable }}\ ="
+      line: "{{ item.variable }} = {{ item.value }}"
+      state: present
+    with_items:
+      - { variable: 'queue_directory', value: "/var/spool/postfix"}
+      - { variable: 'command_directory', value: '/usr/sbin' }
+      - { variable: 'daemon_directory', value: '/usr/local/etc/postfix/main.cf' }
+      - { variable: 'data_directory', value: '/var/lib/postfix'}
+      - { variable: 'mail_owner', value: 'postfix' }
+      - { variable: 'myhostname', value: 'mail.rel.myjar.net' }
+      - { variable: 'mydomain', value: 'rel.myjar.net' }
+      - { variable: 'myorigin', value: '$mydomain' }
+      - { variable: 'inet_interfaces', value: "localhost"}
+      - { variable: 'inet_protocols', value: 'all' }
+      - { variable: 'mydestination', value: '$myhostname, localhost.$mydomain, localhost, $mydomain' }
+      - { variable: 'unknown_local_recipient_reject_code', value: '550'}
+      - { variable: 'mynetworks', value: '0.0.0.0/16' }
+      - { variable: 'alias_maps', value: 'hash:/etc/aliases' }
+      - { variable: 'alias_database', value: 'hash:/etc/aliases' }
+      - { variable: 'sendmail_path', value: '/usr/sbin/sendmail.postfix' }
+      - { variable: 'newaliases_path', value: '/usr/bin/newaliases.postfix' }
+      - { variable: 'mailq_path', value: '/usr/bin/mailq.postfix' }
+      - { variable: 'setgid_group', value: 'postdrop'}
+      - { variable: 'html_directory', value: 'no' }
+      - { variable: 'relayhost', value: '[{{ mx_server_ip }}]:{{ port }}' }
+      - { variable: 'smtp_sasl_auth_enable', value: 'yes' }
+      - { variable: 'smtp_sasl_password_maps', value: 'hash:/etc/postfix/sasl_passwd' }
+      - { variable: 'smtp_sasl_security_options', value: 'noanonymous' }
+      - { variable: 'smtp_tls_CAfile', value: '/etc/postfix/cacert.pem'}
+      - { variable: 'smtp_use_tls', value: 'yes' }
+    
+    tags: 
+      - config
+
+  - name: Create /etc/postfix/sasl_passwd
+    lineinfile:
+      backup: yes
+      create: yes
+      dest: /etc/postfix/sasl_passwd
+      regexp: "^{{ ses_host }}"
+      line: "{{ host }}:{{ port }}  {{ username }}:{{ password }}"
+    tags:
+      - config
+      
+  - name: postmaphash:/etc/postfix/sasl_passwd
+    command: postmap hash:/etc/postfix/sasl_passwd
+    tags:
+      - config
+      
+  - name: Remove /etc/postfix/sasl_passwd
+    command: rm /etc/postfix/sasl_passwd
+    tags:
+      - config
+      
+  - name: Change permissions on /etc/postfix/sasl_passwd.db
+    command: chmod 0600 /etc/postfix/sasl_passwd.db
+    tags:
+      - config
+      
+  - name: postfix CA cert
+    command: postconf -e 'smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt'
+    tags:
+      - config
+      
+  - name: Restart postfix
+    service:
+      name: postfix
+      state: restarted
+    tags:
+      - config
+      
+  - name: Enable services for automatic start
+    service:
+      name: "{{ item }}"
+      enabled: yes
+    with_items:
+      - postfix 
+
+
+  
+ 

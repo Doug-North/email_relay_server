@@ -1,0 +1,6 @@
+vars:
+  host: host
+  port: 587
+  username: none    
+  password: none
+  mx_server_ip: -BLANK-
